@@ -110,4 +110,4 @@ pagina = st.sidebar.radio("Navegação", [
 # Carrega os dados em background para todo o app
 try:
     dados = carregar_dados()
-    retornos = np.
+    retornos = np.log(dados / dados.shift(1)).dropna()
