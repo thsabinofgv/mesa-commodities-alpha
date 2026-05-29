@@ -171,118 +171,34 @@ elif pagina == "3. Precificação e Gregas":
         st.metric("Preço ETF (Black-Scholes)", f"$ {bs_price:.4f}")
         st.metric("Preço Futuro (Black-76)", f"$ {b76_price:.4f}")
         
-        st.markdown("---")
-        st.subheader("Letras Gregas")
-        gregas = calcular_gregas(S, K, T, r, sigma, tipo)
-        for k, v in gregas.items():
-            st.write(f"**{k}:** {v:.4f}")
-
-elif pagina == "4. Volatilidade Implícita":
-    st.title("Métodos Numéricos e Smile (Parte III a V)")
+st.markdown("---")
+    st.subheader("Smile de Volatilidade Dinâmico")
+    st.write("Edite os prêmios (Preço Call) na tabela abaixo simulando diferentes condições de mercado. O gráfico e a volatilidade implícita reagirão em tempo real! [cite: 111-115]")
     
-    S_teste, K_teste, T_teste, r_teste = 100, 100, 1.0, 0.05
-    preco_mercado = st.slider("Simular Preço de Mercado da Opção", 5.0, 20.0, 10.45)
+    # Criamos um DataFrame padrão
+    df_base_smile = pd.DataFrame({
+        "Strike": [80, 90, 100, 110, 120],
+        "Preço Call": [23.5, 13.8, 6.5, 2.8, 1.5]
+    })
     
-    st.subheader("Comparação dos Algoritmos")
-    resultados = []
-    metodos = [("Bisseção", vol_bissecao), ("Newton-Raphson", vol_newton), ("Secante", vol_secante), ("Brent", vol_brent)]
+    # Transformamos o DataFrame em uma tabela editável na tela do usuário
+    col_tabela, col_grafico = st.columns([1, 2])
     
-    for nome, func in metodos:
-        inicio = time.time()
-        if nome == "Brent": vol, iters = func(S_teste, K_teste, T_teste, r_teste, preco_mercado)
-        else: vol, iters = func(S_teste, K_teste, T_teste, r_teste, preco_mercado)
-        tempo = time.time() - inicio
-        
-        erro = abs(black_scholes(S_teste, K_teste, T_teste, r_teste, vol) - preco_mercado) if not np.isnan(vol) else np.nan
-        resultados.append({"Método": nome, "Vol Implícita": vol, "Iterações": iters, "Erro": f"{erro:.2e}", "Tempo (s)": tempo})
-        
-    st.dataframe(pd.DataFrame(resultados).style.format({"Vol Implícita": "{:.4f}", "Tempo (s)": "{:.6f}"}))
+    with col_tabela:
+        df_editado = st.data_editor(df_base_smile, hide_index=True, use_container_width=True)
     
-    st.markdown("---")
-    st.subheader("Smile de Volatilidade")
-    strikes = [80, 90, 100, 110, 120]
-    precos_call = [23.5, 13.8, 6.5, 2.8, 1.5]
-    vols_smile = [vol_brent(100, k, 90/252, 0.05, p)[0] for k, p in zip(strikes, precos_call)]
-    
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.plot(strikes, vols_smile, marker='o', color='indigo')
-    ax.set_title("Smile para Vencimento de 90 dias")
-    ax.set_xlabel("Strike")
-    ax.set_ylabel("Vol. Implícita")
-    ax.grid(True)
-    st.pyplot(fig)
-
-elif pagina == "5. VaR e Expected Shortfall":
-    st.title("Análise de Risco (Parte VII a IX)")
-    
-    if dados_ok:
-        ativo = st.selectbox("Selecione a Commodity para Análise", ['CL=F', 'GC=F', 'ZS=F'])
-        posicao = 1000000
+    # Recalculamos a Volatilidade para cada linha editada pelo usuário
+    vols_smile = []
+    for index, row in df_editado.iterrows():
+        # Usando o método de Brent para garantir que sempre ache a raiz
+        vol_calc = vol_brent(100, row["Strike"], 90/252, 0.05, row["Preço Call"])[0]
+        vols_smile.append(vol_calc)
         
-        rets = retornos[ativo]
-        vol_d = rets.std()
-        
-        st.subheader(f"VaR 1 Dia - Posição: $ 1.000.000 em {ativo}")
-        
-        var_hist_99 = abs(np.percentile(rets, 1) * posicao)
-        var_param_99 = norm.ppf(0.99) * vol_d * posicao
-        
-        col1, col2 = st.columns(2)
-        col1.metric("VaR Histórico (99%)", f"$ {var_hist_99:,.2f}")
-        col2.metric("VaR Paramétrico (99%)", f"$ {var_param_99:,.2f}")
-        
-        st.markdown("---")
-        st.subheader("Full Valuation VaR e Expected Shortfall (Posição Opções de Ouro GLD)")
-        st.write("Recalculando prêmios para 10.000 cenários de Monte Carlo...")
-        
-        Z = np.random.standard_normal(10000)
-        ST = 200 * np.exp((0.05 - 0.5 * 0.15**2)*(1/252) + 0.15 * np.sqrt(1/252) * Z)
-        V_cenarios = black_scholes(ST, 205, (90/252) - (1/252), 0.05, 0.15) * 25000
-        V0 = black_scholes(200, 205, 90/252, 0.05, 0.15) * 25000
-        
-        L = V0 - V_cenarios
-        var_full = np.percentile(L, 99)
-        es_full = np.mean(L[L > var_full])
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Valor Posição (V0)", f"$ {V0:,.2f}")
-        c2.metric("VaR Full Valuation (99%)", f"$ {var_full:,.2f}")
-        c3.metric("Expected Shortfall (99%)", f"$ {es_full:,.2f}")
-        
-    else:
-        st.error("Dados não carregados.")
-
-elif pagina == "6. Backtest e Stress Testing":
-    st.title("Validação do Modelo (Parte X e XI)")
-    
-    if dados_ok:
-        st.subheader("Backtesting do VaR (Petróleo)")
-        rets = retornos['CL=F']
-        posicao = 1000000
-        pnl = rets * posicao
-        var_movel = rets.rolling(250).quantile(0.01).shift(1) * posicao
-        
-        df_back = pd.DataFrame({'PnL': pnl, 'VaR': var_movel}).dropna()
-        violacoes = df_back[df_back['PnL'] < df_back['VaR']]
-        
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.plot(df_back.index, df_back['PnL'], label='PnL', alpha=0.6)
-        ax.plot(df_back.index, df_back['VaR'], label='VaR 99%', color='red')
-        ax.scatter(violacoes.index, violacoes['PnL'], color='black', marker='x', label='Violação', zorder=5)
-        ax.legend()
+    with col_grafico:
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.plot(df_editado["Strike"], vols_smile, marker='o', color='indigo', linewidth=2)
+        ax.set_title("Curva do Smile (Vencimento de 90 dias)")
+        ax.set_xlabel("Strike")
+        ax.set_ylabel("Vol. Implícita")
+        ax.grid(True, linestyle='--', alpha=0.7)
         st.pyplot(fig)
-        
-        col1, col2 = st.columns(2)
-        col1.metric("Total de Violações", len(violacoes))
-        col2.metric("Dias Testados", len(df_back))
-        
-        st.markdown("---")
-        st.subheader("Stress Testing - Posições de $ 1.000.000")
-        cenarios = [
-            {"Cenário": "Recessão global", "Ativo": "Petróleo", "Choque": "-25%", "Perda Projetada": posicao * -0.25},
-            {"Cenário": "Fuga para segurança", "Ativo": "Ouro", "Choque": "+15%", "Perda Projetada": posicao * 0.15},
-            {"Cenário": "Choque de oferta", "Ativo": "Gás Natural", "Choque": "+40%", "Perda Projetada": posicao * 0.40}
-        ]
-        st.table(pd.DataFrame(cenarios).style.format({"Perda Projetada": "$ {:,.2f}"}))
-    else:
-        st.error("Dados não carregados.")
