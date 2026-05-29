@@ -171,7 +171,7 @@ elif pagina == "3. Precificação e Gregas":
         st.metric("Preço ETF (Black-Scholes)", f"$ {bs_price:.4f}")
         st.metric("Preço Futuro (Black-76)", f"$ {b76_price:.4f}")
         
-st.markdown("---")
+    st.markdown("---")
     st.subheader("Smile de Volatilidade Dinâmico")
     st.write("Edite os prêmios (Preço Call) na tabela abaixo simulando diferentes condições de mercado. O gráfico e a volatilidade implícita reagirão em tempo real! [cite: 111-115]")
     
